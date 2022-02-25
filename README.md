@@ -1,5 +1,5 @@
 # sisense-monitor
-Alert system for Sisense builds. Sends messages to MS Teams.
+Alert system for Sisense cube builds. Sends messages to MS Teams.
 
 # usage
 
