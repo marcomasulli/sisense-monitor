@@ -20,10 +20,10 @@ class Config(object):
         "Content-Type": "application/json",
     }
     # teams connector url
-    TEAMS_CONNECTOR_URL = os.environ.get("TEAMS_CONNECTOR_URL") or "https://teams.connector.url"
-    # sp credentials
-    SP_ROOT_URL = (
-        "https://teams.sharepoint.com/sites/team"
+    TEAMS_CONNECTOR_URL = (
+        os.environ.get("TEAMS_CONNECTOR_URL") or "https://teams.connector.url"
     )
+    # sp credentials
+    SP_ROOT_URL = "https://teams.sharepoint.com/sites/team"
     SP_ID = os.environ.get("SP_ID") or "SharepointId"
     SP_SECRET = os.environ.get("SP_SECRET") or "SharepointSecret"

@@ -129,118 +129,19 @@ def send_teams_card(card_json):
     return response
 
 
-def evaluate_builds(builds_df):
-
-    # get failed builds
-    failed_builds = builds_df.loc[builds_df["status"].str.match("failed"), :]
-    failed_builds.loc[:, "completed"] = pd.to_datetime(failed_builds["completed"])
-
-    # get running builds - if a cube that failed is running, we won't act on it
-    running_builds = builds_df.loc[
-        (builds_df["status"].str.match("building") | builds_df["status"].isna()), :
-    ]
-    running_builds.loc[:, "completed"] = pd.to_datetime(running_builds["completed"])
-
-    # get successful builds
-    successful_builds = builds_df.loc[builds_df["status"].str.match("done"), :]
-    successful_builds.loc[:, "completed"] = pd.to_datetime(
-        successful_builds["completed"]
-    )
-
-    # join last failed build with last successful build
-    compared_build_status = (
-        failed_builds[
-            ["datamodelId", "status", "datamodelTitle", "datamodelType", "completed",]
-        ]
-        .groupby(["datamodelId", "status", "datamodelTitle", "datamodelType",])[
-            "completed"
-        ]
-        .last()
-        .to_frame("completed")
-        .reset_index()
-        .merge(
-            successful_builds[
-                [
-                    "datamodelId",
-                    "status",
-                    "datamodelTitle",
-                    "datamodelType",
-                    "completed",
-                ]
-            ]
-            .groupby(["datamodelId", "status", "datamodelTitle", "datamodelType",])[
-                "completed"
-            ]
-            .last()
-            .to_frame("completed")
-            .reset_index(),
-            on="datamodelId",
-            how="left",
-            suffixes=("_f", "_s"),
-        )
-    )
-
-    # the above results in a dataframe which has side by side the last successful build
-    # and the last failure.
-
-    if compared_build_status.empty:
-        return None, None
-    else:
-        # if we have a NaT value, convert to 1970-01-01
-        for col in ["completed_f", "completed_s"]:
-            compared_build_status[col] = compared_build_status.apply(
-                lambda x: pd.Timestamp("1970-01-01 00:00:00.0000", tz="UTC")
-                if type(x[col]) == pd._libs.tslibs.nattype.NaTType
-                else x[col],
-                axis=1,
-            )
-
-        # now let's check what is the latest build status: failing or successful
-        compared_build_status["current_status"] = compared_build_status.apply(
-            lambda x: "failing" if x["completed_f"] > x["completed_s"] else "completed",
-            axis=1,
-        )
-
-        # remove running cubes
-        running_check = compared_build_status.merge(
-            running_builds, on="datamodelId", how="inner"
-        )
-        if running_check.empty:
-            print("ok")
-        else:
-            compared_build_status = compared_build_status.loc[
-                ~(compared_build_status.oid.str.isin(running_check.oid.tolist())), :
-            ]
-
-        # compared builds now only has cubes that are _not_ currently running.
-        # let's get the success exit cubes and stash them.
-        exit_success = compared_build_status.loc[
-            compared_build_status.current_status.str.match("completed"), :
-        ]
-
-        # and then those that have failed.
-        exit_failure = compared_build_status.loc[
-            compared_build_status.current_status.str.match("failing"), :
-        ]
-
-        return exit_success, exit_failure
-
-
 def check_builds():
-    """ Base task """
+    """Base task"""
     response = requests.get(
         url=urljoin(Config.SISENSE_URL, "v2/builds"), headers=Config.SISENSE_HEADERS
     )
     builds = pd.DataFrame(data=response.json())
-    failed_builds = builds.loc[
-        (builds.status == "failed")
-    ]
+    failed_builds = builds.loc[(builds.status == "failed")]
     # for each failed cube:
     for build in failed_builds.to_dict(orient="records"):
         # check if failed cube is already recorded (oid), if not record
-        recorded_failure = session.query(FailedBuilds).filter(
-            FailedBuilds.oid == build["oid"]
-        ).first()
+        recorded_failure = (
+            session.query(FailedBuilds).filter(FailedBuilds.oid == build["oid"]).first()
+        )
         if recorded_failure is None:
             # record
             record_failure(
@@ -261,4 +162,3 @@ def check_builds():
             # send card
             send_teams_card(card)
             return error_dict
-
